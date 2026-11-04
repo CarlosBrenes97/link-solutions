@@ -1,0 +1,30 @@
+# Secretos: NUNCA subir
+.env
+*.env
+local.settings.json
+appsettings.Production.json
+*.pubxml.user
+*.PublishSettings
+*.publishsettings
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Datos generados (se reproducen con la semilla)
+datos/generador/salida/
+*.db
+
+# nopCommerce se descarga con tienda/setup_tienda.* y no se versiona aquí
+tienda/nopCommerce/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.vs/
+.vscode/
+.idea/
+*.log
