@@ -102,6 +102,37 @@ def limpiar_clientes(df: pd.DataFrame) -> pd.DataFrame:
     df["fecha_registro"] = pd.to_datetime(df["fecha_registro"]).dt.date
     return df[["email", "nombre", "tipo_cliente", "provincia", "canal_adquisicion", "fecha_registro"]]
 
+def extraer_productos_tienda(engine) -> pd.DataFrame:
+    """Extrae el catálogo de nopCommerce sin duplicar productos."""
+
+    consulta = text("""
+        SELECT
+            p.Sku AS sku,
+            p.Name AS nombre,
+            COALESCE(
+                MIN(c.Name),
+                'Sin categoría'
+            ) AS categoria,
+            p.Price AS precio
+        FROM Product p
+        LEFT JOIN Product_Category_Mapping pc
+            ON pc.ProductId = p.Id
+        LEFT JOIN Category c
+            ON c.Id = pc.CategoryId
+        WHERE p.Deleted = 0
+          AND p.Sku IS NOT NULL
+          AND LTRIM(RTRIM(p.Sku)) <> ''
+        GROUP BY
+            p.Id,
+            p.Sku,
+            p.Name,
+            p.Price
+    """)
+
+    with engine.connect() as conexion:
+        productos = pd.read_sql(consulta, conexion)
+
+    return limpiar_productos(productos)
 
 def limpiar_productos(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -122,8 +153,8 @@ def construir_dim_fecha(desde, hasta) -> pd.DataFrame:
         "mes": dias.month,
         "nombre_mes": [nombres_mes[m - 1] for m in dias.month],
         "trimestre": dias.quarter,
-        "dia_semana": [nombres_dia[d] for d in dias.dayofweek],
-        "es_fin_semana": (dias.dayofweek >= 5).astype(int),
+        "dia_semana": [nombres_dia[d] for d in dias.day_of_week],
+        "es_fin_semana": (dias.day_of_week >= 5).astype(int),
     })
 
 
@@ -159,6 +190,25 @@ def cargar(cfg: Config):
     ventas_hist = limpiar_ventas(historico, "historico")
     ventas_hist = ventas_hist.rename(columns={"pedido_id": "pedido_id_nop"})
     ventas_hist["linea_id_nop"] = range(1, len(ventas_hist) + 1)
+
+    # Integrar el catálogo real de nopCommerce con el catálogo simulado.
+    if tienda is not None:
+        productos_tienda = extraer_productos_tienda(tienda)
+
+        productos = pd.concat(
+            [productos_tienda, productos],
+            ignore_index=True
+        )
+
+        productos = productos.drop_duplicates(
+            subset=["sku"],
+            keep="first"
+        )
+
+        log.info(
+            "Catálogo integrado: %d productos únicos",
+            len(productos)
+        )
 
     ventas_tienda = pd.DataFrame()
     if tienda is not None:
