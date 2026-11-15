@@ -50,6 +50,7 @@ class Config:
     @staticmethod
     def desde_entorno():
         aqui = os.path.dirname(os.path.abspath(__file__))
+        cargar_env_local(os.path.join(aqui, "..", "..", ".env"))
         return Config(
             sql_dw=os.environ["SQL_DW"],
             sql_tienda=os.environ.get("SQL_TIENDA") or None,
@@ -57,6 +58,25 @@ class Config:
             blob_contenedor=os.environ.get("BLOB_CONTENEDOR", "comentarios"),
             data_dir=os.environ.get("DATA_DIR", os.path.join(aqui, "..", "generador", "salida")),
         )
+
+
+def cargar_env_local(ruta: str):
+    """Carga un .env local sin imprimir secretos ni requerir otra dependencia.
+
+    Azure ya entrega las variables de entorno directamente. Esta lectura solo
+    facilita la ejecución local desde PowerShell o VS Code.
+    """
+    if not os.path.isfile(ruta):
+        return
+    with open(ruta, encoding="utf-8") as archivo:
+        for linea in archivo:
+            linea = linea.strip()
+            if not linea or linea.startswith("#") or "=" not in linea:
+                continue
+            clave, valor = linea.split("=", 1)
+            clave = clave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            os.environ.setdefault(clave, valor)
 
 
 # --------------------------------------------------------------------------- EXTRAER
@@ -95,11 +115,14 @@ def clave_fecha(serie) -> pd.Series:
 
 def limpiar_clientes(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    df = df.dropna(subset=["email"])
     df["email"] = df["email"].astype(str).str.strip().str.lower()
-    df = df.dropna(subset=["email"]).drop_duplicates("email")
+    df = df[df["email"] != ""].drop_duplicates("email")
     df["nombre"] = df["nombre"].fillna("Sin nombre").str.strip()
     df["tipo_cliente"] = df["tipo_cliente"].fillna("Individual")
-    df["fecha_registro"] = pd.to_datetime(df["fecha_registro"]).dt.date
+    df["fecha_registro"] = pd.to_datetime(df["fecha_registro"], errors="coerce")
+    df = df.dropna(subset=["fecha_registro"])
+    df["fecha_registro"] = df["fecha_registro"].dt.date
     return df[["email", "nombre", "tipo_cliente", "provincia", "canal_adquisicion", "fecha_registro"]]
 
 def extraer_productos_tienda(engine) -> pd.DataFrame:
@@ -136,7 +159,9 @@ def extraer_productos_tienda(engine) -> pd.DataFrame:
 
 def limpiar_productos(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    df = df.dropna(subset=["sku"])
     df["sku"] = df["sku"].astype(str).str.strip().str.upper()
+    df = df[df["sku"] != ""]
     df = df.drop_duplicates("sku")
     return df.rename(columns={"precio": "precio_lista"})[["sku", "nombre", "categoria", "precio_lista"]]
 
@@ -160,9 +185,14 @@ def construir_dim_fecha(desde, hasta) -> pd.DataFrame:
 
 def limpiar_ventas(df: pd.DataFrame, origen: str) -> pd.DataFrame:
     df = df.copy()
-    df["fecha"] = pd.to_datetime(df["fecha"]).dt.normalize()
+    df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce").dt.normalize()
+    df["cantidad"] = pd.to_numeric(df["cantidad"], errors="coerce")
+    df = df.dropna(subset=["fecha", "producto_sku", "cantidad"])
     df["producto_sku"] = df["producto_sku"].astype(str).str.strip().str.upper()
+    df = df[df["producto_sku"] != ""]
     df = df[df["cantidad"] > 0]
+    if "precio_unitario" in df:
+        df["precio_unitario"] = pd.to_numeric(df["precio_unitario"], errors="coerce")
     df["origen"] = origen
     return df
 
@@ -175,6 +205,46 @@ def insertar_nuevos(cx, tabla: str, df: pd.DataFrame, clave: str):
     if len(nuevos):
         nuevos.to_sql(tabla, cx, if_exists="append", index=False)
     log.info("%s: %d nuevos de %d", tabla, len(nuevos), len(df))
+
+
+def sincronizar_productos(cx, df: pd.DataFrame):
+    """Inserta productos nuevos y actualiza los existentes por SKU.
+
+    La tienda es la fuente maestra cuando SQL_TIENDA está configurado. Esto
+    evita que un SKU conserve en el DW el nombre o precio de un catálogo viejo.
+    Los productos obsoletos no se eliminan automáticamente porque podrían tener
+    hechos históricos; para una base de demostración se debe recrear el DW
+    después de limpiar la tienda.
+    """
+    existentes = pd.read_sql(text("SELECT sku FROM dim_producto"), cx)["sku"]
+    existentes = set(existentes.astype(str).str.strip().str.upper())
+    nuevos = df[~df["sku"].isin(existentes)]
+    actualizados = df[df["sku"].isin(existentes)]
+
+    for fila in actualizados.itertuples(index=False):
+        cx.execute(
+            text("""
+                UPDATE dim_producto
+                SET nombre = :nombre,
+                    categoria = :categoria,
+                    precio_lista = :precio_lista
+                WHERE sku = :sku
+            """),
+            {
+                "sku": fila.sku,
+                "nombre": fila.nombre,
+                "categoria": fila.categoria,
+                "precio_lista": fila.precio_lista,
+            },
+        )
+
+    if len(nuevos):
+        nuevos.to_sql("dim_producto", cx, if_exists="append", index=False)
+
+    log.info(
+        "dim_producto: %d actualizados, %d nuevos, %d recibidos",
+        len(actualizados), len(nuevos), len(df),
+    )
 
 
 def cargar(cfg: Config):
@@ -227,8 +297,11 @@ def cargar(cfg: Config):
              len(productos), len(clientes), len(comentarios), len(ventas_hist), len(ventas_tienda))
 
     ventas = pd.concat([ventas_hist, ventas_tienda], ignore_index=True)
-    comentarios["fecha"] = pd.to_datetime(comentarios["fecha"]).dt.normalize()
+    comentarios = comentarios.dropna(subset=["comentario_id", "fecha", "producto_sku", "texto"])
+    comentarios["fecha"] = pd.to_datetime(comentarios["fecha"], errors="coerce").dt.normalize()
+    comentarios = comentarios.dropna(subset=["fecha"])
     comentarios["producto_sku"] = comentarios["producto_sku"].astype(str).str.strip().str.upper()
+    comentarios = comentarios[comentarios["producto_sku"] != ""]
     comentarios["email_cliente"] = comentarios["email_cliente"].astype(str).str.strip().str.lower()
 
     # ---- cargar (todo en una transacción: o entra todo o no entra nada)
@@ -239,7 +312,7 @@ def cargar(cfg: Config):
         insertar_nuevos(cx, "dim_fecha", construir_dim_fecha(rango_min, rango_max), "fecha_key")
 
         # dimensiones
-        insertar_nuevos(cx, "dim_producto", productos.rename(columns={"sku": "sku"}), "sku")
+        sincronizar_productos(cx, productos)
         insertar_nuevos(cx, "dim_cliente", clientes, "email")
 
         dim_prod = pd.read_sql(text("SELECT producto_key, sku, precio_lista FROM dim_producto"), cx)
