@@ -145,13 +145,16 @@ def generar_comentarios(rng, clientes, ventas, n=400):
         else:
             plantilla = rng.choice(NEGATIVOS)
         fecha = pd.to_datetime(v.fecha) + pd.Timedelta(days=int(rng.integers(2, 20)))
+        texto = plantilla.format(p=nombre[v.producto_sku])
+        # Corrección gramatical para el nombre femenino del SKU025.
+        texto = texto.replace("El piñata", "La piñata").replace("el piñata", "la piñata")
         filas.append({
             "comentario_id": f"C{i:04d}",
             "fecha": fecha.date().isoformat(),
             "producto_sku": v.producto_sku,
             "email_cliente": f"cliente{int(v.cliente_id)}@ejemplo.com",
             "red_social": str(rng.choice(REDES)),
-            "texto": plantilla.format(p=nombre[v.producto_sku]),
+            "texto": texto,
         })
     return pd.DataFrame(filas).sort_values("fecha")
 

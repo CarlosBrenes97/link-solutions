@@ -247,6 +247,67 @@ def sincronizar_productos(cx, df: pd.DataFrame):
     )
 
 
+def sincronizar_comentarios(cx, df: pd.DataFrame):
+    """Actualiza comentarios existentes por comentario_id e inserta los nuevos.
+
+    Si cambia el texto o el producto asociado, se borra el sentimiento previo
+    porque ya no describe necesariamente al comentario actualizado. Así el
+    módulo de IA puede volver a clasificarlo sin conservar texto de la demo.
+    """
+    columnas = ["comentario_id", "fecha_key", "producto_key", "cliente_key", "red_social", "texto"]
+    existentes = pd.read_sql(text("""
+        SELECT comentario_id, fecha_key, producto_key, cliente_key, red_social, texto, sentimiento
+        FROM fact_comentarios
+    """), cx).set_index("comentario_id")
+    nuevos = []
+    actualizados = 0
+    reclasificar = 0
+
+    for fila in df.itertuples(index=False):
+        clave = fila.comentario_id
+        valores = {
+            "comentario_id": clave,
+            "fecha_key": int(fila.fecha_key),
+            "producto_key": int(fila.producto_key),
+            "cliente_key": None if pd.isna(fila.cliente_key) else int(fila.cliente_key),
+            "red_social": fila.red_social,
+            "texto": fila.texto,
+        }
+        if clave not in existentes.index:
+            nuevos.append(valores)
+            continue
+
+        anterior = existentes.loc[clave]
+        cambio = any(
+            anterior[campo] != valores[campo]
+            for campo in ("fecha_key", "producto_key", "cliente_key", "red_social", "texto")
+            if not (pd.isna(anterior[campo]) and pd.isna(valores[campo]))
+        )
+        cx.execute(text("""
+            UPDATE fact_comentarios
+            SET fecha_key = :fecha_key,
+                producto_key = :producto_key,
+                cliente_key = :cliente_key,
+                red_social = :red_social,
+                texto = :texto,
+                sentimiento = CASE WHEN :cambio = 1 THEN NULL ELSE sentimiento END,
+                puntaje_sentimiento = CASE WHEN :cambio = 1 THEN NULL ELSE puntaje_sentimiento END
+            WHERE comentario_id = :comentario_id
+        """), {**valores, "cambio": int(cambio)})
+        actualizados += 1
+        reclasificar += int(cambio)
+
+    if nuevos:
+        pd.DataFrame(nuevos, columns=columnas).to_sql(
+            "fact_comentarios", cx, if_exists="append", index=False
+        )
+
+    log.info(
+        "fact_comentarios: %d actualizados, %d nuevos, %d para reclasificar",
+        actualizados, len(nuevos), reclasificar,
+    )
+
+
 def cargar(cfg: Config):
     dw = create_engine(cfg.sql_dw)
     tienda = create_engine(cfg.sql_tienda) if cfg.sql_tienda else None
@@ -346,7 +407,7 @@ def cargar(cfg: Config):
         com["producto_key"] = com["producto_key"].astype(int)
         com["cliente_key"] = com["cliente_key"].astype("Int64")
         com = com[["comentario_id", "fecha_key", "producto_key", "cliente_key", "red_social", "texto"]]
-        insertar_nuevos(cx, "fact_comentarios", com, "comentario_id")
+        sincronizar_comentarios(cx, com)
 
     validar(dw, ventas)
 
