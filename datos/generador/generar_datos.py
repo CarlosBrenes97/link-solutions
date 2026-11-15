@@ -25,34 +25,35 @@ PROVINCIAS = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Punt
 CANALES = ["Redes sociales", "Búsqueda en internet", "Recomendación", "Correo"]
 REDES = ["Facebook", "Instagram", "X", "TikTok"]
 
-# (sku, nombre, categoría, precio en colones, probabilidad de comentario positivo)
-# Algunos productos tienen mala fama a propósito, para que los gráficos de opiniones muestren diferencias.
+# Catálogo canónico de la tienda (sku, nombre, categoría, precio en colones,
+# probabilidad de comentario positivo). Los SKU y nombres deben coincidir con
+# los productos importados en nopCommerce y con dim_producto del DW.
 CATALOGO = [
-    ("SKU001", "Teclado mecánico", "Periféricos", 32000, 0.80),
-    ("SKU002", "Mouse inalámbrico", "Periféricos", 12500, 0.75),
-    ("SKU003", "Monitor 24 pulgadas", "Pantallas", 98000, 0.70),
-    ("SKU004", "Monitor 27 pulgadas", "Pantallas", 145000, 0.72),
-    ("SKU005", "Webcam HD", "Periféricos", 21000, 0.35),
-    ("SKU006", "Audífonos con micrófono", "Audio", 18500, 0.65),
-    ("SKU007", "Parlante bluetooth", "Audio", 27500, 0.60),
-    ("SKU008", "Laptop 14 pulgadas", "Computadoras", 385000, 0.78),
-    ("SKU009", "Laptop 15 pulgadas", "Computadoras", 450000, 0.74),
-    ("SKU010", "Disco duro externo 1 TB", "Almacenamiento", 42000, 0.70),
-    ("SKU011", "Memoria USB 64 GB", "Almacenamiento", 6500, 0.55),
-    ("SKU012", "Tarjeta SD 128 GB", "Almacenamiento", 11500, 0.60),
-    ("SKU013", "Router wifi", "Redes", 29000, 0.30),
-    ("SKU014", "Cable de red 10 m", "Redes", 4500, 0.68),
-    ("SKU015", "Switch de 8 puertos", "Redes", 24500, 0.66),
-    ("SKU016", "Impresora multifunción", "Oficina", 89000, 0.40),
-    ("SKU017", "Silla ergonómica", "Oficina", 115000, 0.77),
-    ("SKU018", "Escritorio ajustable", "Oficina", 210000, 0.73),
-    ("SKU019", "Lámpara de escritorio", "Oficina", 9800, 0.69),
-    ("SKU020", "Regleta con protector", "Accesorios", 7400, 0.64),
-    ("SKU021", "Soporte para laptop", "Accesorios", 13500, 0.71),
-    ("SKU022", "Hub USB-C", "Accesorios", 15500, 0.58),
-    ("SKU023", "Mochila para laptop", "Accesorios", 22500, 0.76),
-    ("SKU024", "Cargador portátil", "Accesorios", 14500, 0.45),
-    ("SKU025", "Tableta gráfica", "Periféricos", 68000, 0.62),
+    ("SKU001", "Juego de mesa familiar", "Juegos de mesa", 18500, 0.75),
+    ("SKU002", "Rompecabezas de 1000 piezas", "Juegos de mesa", 9500, 0.70),
+    ("SKU003", "Juego de cartas clásico", "Juegos de mesa", 3800, 0.68),
+    ("SKU004", "Ajedrez de madera", "Juegos de mesa", 14500, 0.72),
+    ("SKU005", "Dominó de colores", "Juegos de mesa", 6200, 0.67),
+    ("SKU006", "Set de bloques de construcción", "Didácticos y construcción", 14000, 0.78),
+    ("SKU007", "Set de ciencia para niños", "Didácticos y construcción", 17500, 0.76),
+    ("SKU008", "Pizarra magnética infantil", "Didácticos y construcción", 11500, 0.70),
+    ("SKU009", "Rompecabezas de madera para bebés", "Didácticos y construcción", 7800, 0.65),
+    ("SKU010", "Peluche de oso grande", "Muñecos y peluches", 21500, 0.82),
+    ("SKU011", "Muñeca con accesorios", "Muñecos y peluches", 16500, 0.75),
+    ("SKU012", "Figura de acción articulada", "Muñecos y peluches", 9800, 0.68),
+    ("SKU013", "Casa de muñecas", "Muñecos y peluches", 38500, 0.73),
+    ("SKU014", "Robot a control remoto", "Muñecos y peluches", 27500, 0.62),
+    ("SKU015", "Pelota deportiva", "Aire libre", 6500, 0.70),
+    ("SKU016", "Bicicleta infantil", "Aire libre", 68000, 0.74),
+    ("SKU017", "Patineta", "Aire libre", 32500, 0.65),
+    ("SKU018", "Pistola de burbujas", "Aire libre", 4500, 0.80),
+    ("SKU019", "Cometa", "Aire libre", 3200, 0.66),
+    ("SKU020", "Caja de regalo sorpresa", "Regalos y detalles", 15500, 0.72),
+    ("SKU021", "Tarjeta musical", "Regalos y detalles", 3500, 0.78),
+    ("SKU022", "Set de papel de regalo", "Regalos y detalles", 4200, 0.70),
+    ("SKU023", "Disfraz infantil de superhéroe", "Fiestas y disfraces", 12500, 0.75),
+    ("SKU024", "Paquete de 20 globos metalizados", "Fiestas y disfraces", 4800, 0.68),
+    ("SKU025", "Piñata tradicional", "Fiestas y disfraces", 9500, 0.71),
 ]
 
 POSITIVOS = [

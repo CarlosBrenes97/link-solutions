@@ -50,6 +50,7 @@ class Config:
     @staticmethod
     def desde_entorno():
         aqui = os.path.dirname(os.path.abspath(__file__))
+        cargar_env_local(os.path.join(aqui, "..", "..", ".env"))
         return Config(
             sql_dw=os.environ["SQL_DW"],
             sql_tienda=os.environ.get("SQL_TIENDA") or None,
@@ -57,6 +58,25 @@ class Config:
             blob_contenedor=os.environ.get("BLOB_CONTENEDOR", "comentarios"),
             data_dir=os.environ.get("DATA_DIR", os.path.join(aqui, "..", "generador", "salida")),
         )
+
+
+def cargar_env_local(ruta: str):
+    """Carga un .env local sin imprimir secretos ni requerir otra dependencia.
+
+    Azure ya entrega las variables de entorno directamente. Esta lectura solo
+    facilita la ejecución local desde PowerShell o VS Code.
+    """
+    if not os.path.isfile(ruta):
+        return
+    with open(ruta, encoding="utf-8") as archivo:
+        for linea in archivo:
+            linea = linea.strip()
+            if not linea or linea.startswith("#") or "=" not in linea:
+                continue
+            clave, valor = linea.split("=", 1)
+            clave = clave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            os.environ.setdefault(clave, valor)
 
 
 # --------------------------------------------------------------------------- EXTRAER
@@ -136,7 +156,9 @@ def extraer_productos_tienda(engine) -> pd.DataFrame:
 
 def limpiar_productos(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    df = df.dropna(subset=["sku"])
     df["sku"] = df["sku"].astype(str).str.strip().str.upper()
+    df = df[df["sku"] != ""]
     df = df.drop_duplicates("sku")
     return df.rename(columns={"precio": "precio_lista"})[["sku", "nombre", "categoria", "precio_lista"]]
 
@@ -175,6 +197,46 @@ def insertar_nuevos(cx, tabla: str, df: pd.DataFrame, clave: str):
     if len(nuevos):
         nuevos.to_sql(tabla, cx, if_exists="append", index=False)
     log.info("%s: %d nuevos de %d", tabla, len(nuevos), len(df))
+
+
+def sincronizar_productos(cx, df: pd.DataFrame):
+    """Inserta productos nuevos y actualiza los existentes por SKU.
+
+    La tienda es la fuente maestra cuando SQL_TIENDA está configurado. Esto
+    evita que un SKU conserve en el DW el nombre o precio de un catálogo viejo.
+    Los productos obsoletos no se eliminan automáticamente porque podrían tener
+    hechos históricos; para una base de demostración se debe recrear el DW
+    después de limpiar la tienda.
+    """
+    existentes = pd.read_sql(text("SELECT sku FROM dim_producto"), cx)["sku"]
+    existentes = set(existentes.astype(str).str.strip().str.upper())
+    nuevos = df[~df["sku"].isin(existentes)]
+    actualizados = df[df["sku"].isin(existentes)]
+
+    for fila in actualizados.itertuples(index=False):
+        cx.execute(
+            text("""
+                UPDATE dim_producto
+                SET nombre = :nombre,
+                    categoria = :categoria,
+                    precio_lista = :precio_lista
+                WHERE sku = :sku
+            """),
+            {
+                "sku": fila.sku,
+                "nombre": fila.nombre,
+                "categoria": fila.categoria,
+                "precio_lista": fila.precio_lista,
+            },
+        )
+
+    if len(nuevos):
+        nuevos.to_sql("dim_producto", cx, if_exists="append", index=False)
+
+    log.info(
+        "dim_producto: %d actualizados, %d nuevos, %d recibidos",
+        len(actualizados), len(nuevos), len(df),
+    )
 
 
 def cargar(cfg: Config):
@@ -239,7 +301,7 @@ def cargar(cfg: Config):
         insertar_nuevos(cx, "dim_fecha", construir_dim_fecha(rango_min, rango_max), "fecha_key")
 
         # dimensiones
-        insertar_nuevos(cx, "dim_producto", productos.rename(columns={"sku": "sku"}), "sku")
+        sincronizar_productos(cx, productos)
         insertar_nuevos(cx, "dim_cliente", clientes, "email")
 
         dim_prod = pd.read_sql(text("SELECT producto_key, sku, precio_lista FROM dim_producto"), cx)

@@ -50,6 +50,13 @@ def test_idempotente():
                      data_dir=os.environ["DATA_DIR"])
     etl.cargar(cfg)
     primera = contar(eng)
+
+    # Debe corregir un catálogo existente, no solamente insertar SKU nuevos.
+    with eng.begin() as cx:
+        cx.execute(text(
+            "UPDATE dim_producto SET nombre = 'Nombre viejo', precio_lista = 1 WHERE sku = 'SKU004'"
+        ))
+
     etl.cargar(cfg)
     segunda = contar(eng)
     print(primera)
@@ -57,7 +64,11 @@ def test_idempotente():
     assert primera["fact_ventas"] > 0 and primera["fact_comentarios"] > 0
     with eng.connect() as cx:
         total = cx.execute(text("SELECT SUM(total_linea) FROM fact_ventas")).scalar()
+        producto = cx.execute(text(
+            "SELECT nombre, precio_lista FROM dim_producto WHERE sku = 'SKU004'"
+        )).one()
     assert total > 0
+    assert producto == ("Ajedrez de madera", 14500)
 
 
 if __name__ == "__main__":
