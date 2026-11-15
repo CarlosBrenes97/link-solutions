@@ -115,11 +115,14 @@ def clave_fecha(serie) -> pd.Series:
 
 def limpiar_clientes(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    df = df.dropna(subset=["email"])
     df["email"] = df["email"].astype(str).str.strip().str.lower()
-    df = df.dropna(subset=["email"]).drop_duplicates("email")
+    df = df[df["email"] != ""].drop_duplicates("email")
     df["nombre"] = df["nombre"].fillna("Sin nombre").str.strip()
     df["tipo_cliente"] = df["tipo_cliente"].fillna("Individual")
-    df["fecha_registro"] = pd.to_datetime(df["fecha_registro"]).dt.date
+    df["fecha_registro"] = pd.to_datetime(df["fecha_registro"], errors="coerce")
+    df = df.dropna(subset=["fecha_registro"])
+    df["fecha_registro"] = df["fecha_registro"].dt.date
     return df[["email", "nombre", "tipo_cliente", "provincia", "canal_adquisicion", "fecha_registro"]]
 
 def extraer_productos_tienda(engine) -> pd.DataFrame:
@@ -182,9 +185,14 @@ def construir_dim_fecha(desde, hasta) -> pd.DataFrame:
 
 def limpiar_ventas(df: pd.DataFrame, origen: str) -> pd.DataFrame:
     df = df.copy()
-    df["fecha"] = pd.to_datetime(df["fecha"]).dt.normalize()
+    df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce").dt.normalize()
+    df["cantidad"] = pd.to_numeric(df["cantidad"], errors="coerce")
+    df = df.dropna(subset=["fecha", "producto_sku", "cantidad"])
     df["producto_sku"] = df["producto_sku"].astype(str).str.strip().str.upper()
+    df = df[df["producto_sku"] != ""]
     df = df[df["cantidad"] > 0]
+    if "precio_unitario" in df:
+        df["precio_unitario"] = pd.to_numeric(df["precio_unitario"], errors="coerce")
     df["origen"] = origen
     return df
 
@@ -289,8 +297,11 @@ def cargar(cfg: Config):
              len(productos), len(clientes), len(comentarios), len(ventas_hist), len(ventas_tienda))
 
     ventas = pd.concat([ventas_hist, ventas_tienda], ignore_index=True)
-    comentarios["fecha"] = pd.to_datetime(comentarios["fecha"]).dt.normalize()
+    comentarios = comentarios.dropna(subset=["comentario_id", "fecha", "producto_sku", "texto"])
+    comentarios["fecha"] = pd.to_datetime(comentarios["fecha"], errors="coerce").dt.normalize()
+    comentarios = comentarios.dropna(subset=["fecha"])
     comentarios["producto_sku"] = comentarios["producto_sku"].astype(str).str.strip().str.upper()
+    comentarios = comentarios[comentarios["producto_sku"] != ""]
     comentarios["email_cliente"] = comentarios["email_cliente"].astype(str).str.strip().str.lower()
 
     # ---- cargar (todo en una transacción: o entra todo o no entra nada)

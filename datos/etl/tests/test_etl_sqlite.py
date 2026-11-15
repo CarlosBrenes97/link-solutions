@@ -9,6 +9,8 @@ import os
 import sys
 import tempfile
 
+import pandas as pd
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sqlalchemy import create_engine, text  # noqa: E402
@@ -39,6 +41,26 @@ def contar(eng):
 
 
 def test_idempotente():
+    clientes_sucios = pd.DataFrame([
+        {"email": " A@EJEMPLO.COM ", "nombre": "A", "tipo_cliente": None,
+         "provincia": "San José", "canal_adquisicion": "Correo", "fecha_registro": "2026-01-01"},
+        {"email": "a@ejemplo.com", "nombre": "Duplicado", "tipo_cliente": None,
+         "provincia": "San José", "canal_adquisicion": "Correo", "fecha_registro": "fecha inválida"},
+        {"email": None, "nombre": "Sin correo", "tipo_cliente": None,
+         "provincia": None, "canal_adquisicion": None, "fecha_registro": "2026-01-01"},
+    ])
+    clientes_limpios = etl.limpiar_clientes(clientes_sucios)
+    assert len(clientes_limpios) == 1
+    assert clientes_limpios.iloc[0]["email"] == "a@ejemplo.com"
+
+    ventas_sucias = pd.DataFrame([
+        {"fecha": "2026-01-01", "producto_sku": "SKU001", "cantidad": 2},
+        {"fecha": "fecha inválida", "producto_sku": "SKU001", "cantidad": 1},
+        {"fecha": "2026-01-01", "producto_sku": "", "cantidad": 1},
+        {"fecha": "2026-01-01", "producto_sku": "SKU001", "cantidad": 0},
+    ])
+    assert len(etl.limpiar_ventas(ventas_sucias, "prueba")) == 1
+
     carpeta = tempfile.mkdtemp()
     ruta = os.path.join(carpeta, "dw.db")
     eng = create_engine(f"sqlite:///{ruta}")

@@ -22,6 +22,19 @@ LOTE = 40
 VALIDOS = {"positivo", "neutro", "negativo"}
 
 
+def cargar_env_local(ruta: str):
+    """Carga variables del .env del repositorio sin imprimir secretos."""
+    if not os.path.isfile(ruta):
+        return
+    with open(ruta, encoding="utf-8") as archivo:
+        for linea in archivo:
+            linea = linea.strip()
+            if not linea or linea.startswith("#") or "=" not in linea:
+                continue
+            clave, valor = linea.split("=", 1)
+            os.environ.setdefault(clave.strip(), valor.strip().strip('"').strip("'"))
+
+
 def analizar_lote(cliente, modelo: str, producto: str, comentarios: list[str]) -> dict:
     """Devuelve {"sentimientos": [...], "resumen": "..."}. Lanza ValueError si la respuesta no es válida."""
     texto = "\n".join(f"{i}. {c}" for i, c in enumerate(comentarios))
@@ -39,12 +52,17 @@ def analizar_lote(cliente, modelo: str, producto: str, comentarios: list[str]) -
     sentimientos = [str(s).strip().lower() for s in datos["sentimientos"]]
     if len(sentimientos) != len(comentarios) or not set(sentimientos) <= VALIDOS:
         raise ValueError("Respuesta del modelo con formato inesperado")
-    return {"sentimientos": sentimientos, "resumen": str(datos["resumen"]).strip()}
+    resumen = str(datos["resumen"]).strip()
+    if not resumen:
+        raise ValueError("Respuesta del modelo sin resumen")
+    return {"sentimientos": sentimientos, "resumen": resumen}
 
 
 def main():
     import anthropic
 
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cargar_env_local(os.path.join(raiz, ".env"))
     cliente = anthropic.Anthropic()  # lee ANTHROPIC_API_KEY del entorno
     modelo = os.environ.get("MODELO_LLM", "claude-haiku-5-5")
     dw = create_engine(os.environ["SQL_DW"])
@@ -58,6 +76,7 @@ def main():
             WHERE c.sentimiento IS NULL
             """), cx)
         log.info("%d comentarios por clasificar", len(pend))
+        clasificados = 0
         for producto_key, grupo in pend.groupby("producto_key"):
             nombre = grupo["nombre"].iloc[0]
             resumenes = []
@@ -74,12 +93,14 @@ def main():
                 for key, s in zip(lote["comentario_key"], r["sentimientos"]):
                     cx.execute(text("UPDATE fact_comentarios SET sentimiento = :s WHERE comentario_key = :k"),
                                {"s": s, "k": int(key)})
+                clasificados += len(lote)
                 resumenes.append(r["resumen"])
             if resumenes:
                 cx.execute(text("DELETE FROM resumen_comentarios WHERE producto_key = :p AND periodo = :t"),
                            {"p": int(producto_key), "t": periodo})
                 cx.execute(text("INSERT INTO resumen_comentarios (producto_key, periodo, resumen) VALUES (:p, :t, :r)"),
                            {"p": int(producto_key), "t": periodo, "r": " ".join(resumenes)})
+        log.info("Comentarios clasificados: %d de %d", clasificados, len(pend))
 
 
 if __name__ == "__main__":
