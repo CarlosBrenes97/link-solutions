@@ -1,0 +1,11 @@
+{
+  "Group": "Widgets",
+  "FriendlyName": "Link Solutions - Recomendaciones",
+  "SystemName": "Widgets.LinkRecommendations",
+  "Version": "1.0.0",
+  "SupportedVersions": [ "4.90" ],
+  "Author": "Link Solutions",
+  "DisplayOrder": 10,
+  "FileName": "Nop.Plugin.Widgets.LinkRecommendations.dll",
+  "Description": "Muestra productos recomendados a partir de compras similares."
+}
