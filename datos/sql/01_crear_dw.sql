@@ -72,6 +72,14 @@ CREATE TABLE resumen_comentarios (
   generado_en  DATETIME2 DEFAULT SYSUTCDATETIME()
 );
 
+-- Predicción por producto generada por la red neuronal de demanda.
+CREATE TABLE pred_demanda (
+  fecha             DATE NOT NULL,
+  producto_key      INT NOT NULL REFERENCES dim_producto(producto_key),
+  demanda_prevista  DECIMAL(18,2) NOT NULL,
+  generado_en       DATETIME2 DEFAULT SYSUTCDATETIME()
+);
+
 -- Índices para las consultas de Power BI
 CREATE INDEX ix_fact_ventas_fecha    ON fact_ventas(fecha_key);
 CREATE INDEX ix_fact_ventas_producto ON fact_ventas(producto_key);

@@ -18,6 +18,12 @@ def correr_ia():
     except Exception:
         log.exception("Falló el pronóstico de ventas")
     try:
+        import demanda_deep_learning
+        demanda_deep_learning.main()
+    except Exception:
+        # El reporte de BI continúa disponible aunque el modelo no pueda entrenar.
+        log.exception("Falló la predicción de demanda con red neuronal")
+    try:
         import resumen_comentarios
         resumen_comentarios.main()
     except Exception:
