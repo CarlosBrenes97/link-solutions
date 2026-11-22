@@ -1,0 +1,11 @@
+{
+  "Group": "Misc",
+  "FriendlyName": "Link Solutions - IA Analytics",
+  "SystemName": "Misc.LinkIaAnalytics",
+  "Version": "1.0.0",
+  "SupportedVersions": [ "4.90" ],
+  "Author": "Link Solutions",
+  "DisplayOrder": 20,
+  "FileName": "Nop.Plugin.Misc.LinkIaAnalytics.dll",
+  "Description": "Panel administrativo para consultar reportes y predicciones de IA."
+}

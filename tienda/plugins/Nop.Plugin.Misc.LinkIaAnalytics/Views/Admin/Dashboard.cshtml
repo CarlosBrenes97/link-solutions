@@ -1,0 +1,69 @@
+@model DashboardModel
+@{
+    Layout = "_AdminLayout";
+    var reporte = Model.Reporte;
+}
+
+<div class="content-header clearfix">
+    <h1 class="float-left">IA Analytics</h1>
+    <div class="float-right">
+        <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Exportar PDF</button>
+    </div>
+</div>
+
+<section class="content">
+    <div class="container-fluid">
+        <div class="card card-default">
+            <div class="card-body">
+                <form asp-controller="LinkIaAnalytics" asp-action="Dashboard" method="get" class="form-inline report-controls">
+                    <label class="mr-2" for="desde">Desde</label>
+                    <input id="desde" name="desde" type="date" value="@Model.Desde" class="form-control mr-3" />
+                    <label class="mr-2" for="hasta">Hasta</label>
+                    <input id="hasta" name="hasta" type="date" value="@Model.Hasta" class="form-control mr-3" />
+                    <button type="submit" class="btn btn-primary">Generar reporte</button>
+                </form>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.Error))
+        {
+            <div class="alert alert-warning">@Model.Error</div>
+        }
+        else if (reporte is not null)
+        {
+            <div class="alert alert-success">@Model.Mensaje</div>
+            <div class="row">
+                <div class="col-lg-3 col-6"><div class="small-box bg-info"><div class="inner"><h3>₡@reporte.Resumen.Ingresos.ToString("N0")</h3><p>Ingresos del periodo</p></div><div class="icon"><i class="fas fa-coins"></i></div></div></div>
+                <div class="col-lg-3 col-6"><div class="small-box bg-success"><div class="inner"><h3>@reporte.Resumen.UnidadesVendidas.ToString("N0")</h3><p>Unidades vendidas</p></div><div class="icon"><i class="fas fa-shopping-bag"></i></div></div></div>
+                <div class="col-lg-3 col-6"><div class="small-box bg-warning"><div class="inner"><h3>@reporte.Resumen.Clientes.ToString("N0")</h3><p>Clientes atendidos</p></div><div class="icon"><i class="fas fa-users"></i></div></div></div>
+                <div class="col-lg-3 col-6"><div class="small-box bg-primary"><div class="inner"><h3>@reporte.Resumen.Compras.ToString("N0")</h3><p>Compras realizadas</p></div><div class="icon"><i class="fas fa-receipt"></i></div></div></div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card card-outline card-primary"><div class="card-header"><h3 class="card-title">Productos con mayor ingreso</h3></div><div class="card-body p-0"><table class="table table-sm"><thead><tr><th>Producto</th><th>Categoría</th><th class="text-right">Ingresos</th></tr></thead><tbody>
+                    @foreach (var item in reporte.ProductosMayorIngreso.Take(5)) { <tr><td>@item.Nombre</td><td>@item.Categoria</td><td class="text-right">₡@item.Ingresos.ToString("N0")</td></tr> }
+                    </tbody></table></div></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card card-outline card-danger"><div class="card-header"><h3 class="card-title">Productos de baja rotación</h3></div><div class="card-body p-0"><table class="table table-sm"><thead><tr><th>Producto</th><th>Categoría</th><th class="text-right">Unidades</th></tr></thead><tbody>
+                    @foreach (var item in reporte.RotacionBaja.Take(5)) { <tr><td>@item.Nombre</td><td>@item.Categoria</td><td class="text-right">@item.Unidades.ToString("N0")</td></tr> }
+                    </tbody></table></div></div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card card-outline card-success"><div class="card-header"><h3 class="card-title">Predicción de demanda por producto</h3></div><div class="card-body p-0"><table class="table table-sm"><thead><tr><th>Mes</th><th>Producto</th><th class="text-right">Demanda prevista</th></tr></thead><tbody>
+                    @foreach (var item in reporte.PrediccionDemanda.Take(8)) { <tr><td>@item.Fecha</td><td>@item.Nombre</td><td class="text-right">@item.DemandaPrevista.ToString("N1")</td></tr> }
+                    </tbody></table></div></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card card-outline card-warning"><div class="card-header"><h3 class="card-title">Opiniones de clientes</h3></div><div class="card-body"><table class="table table-sm"><thead><tr><th>Sentimiento</th><th class="text-right">Comentarios</th></tr></thead><tbody>
+                    @foreach (var item in reporte.ComentariosPorSentimiento) { <tr><td class="text-capitalize">@item.Sentimiento</td><td class="text-right">@item.CantidadComentarios</td></tr> }
+                    </tbody></table></div></div>
+                </div>
+            </div>
+        }
+    </div>
+</section>
